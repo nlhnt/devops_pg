@@ -1,0 +1,44 @@
+    7  yum upgrade -y
+   27  yum --repofrompath=centous,https://mirror.stream.centos.org/9-stream/AppStream/x86_64 -y libglvnd-core-devel libglvnd-devel
+   28  yum --repofrompath=centous,https://mirror.stream.centos.org/9-stream/AppStream/x86_64 -y install libglvnd-core-devel libglvnd-devel
+   29  yum --repofrompath=centos,https://mirror.stream.centos.org/9-stream/AppStream/x86_64 -y install libglvnd-core-devel libglvnd-devel
+   30  yum --nogpgcheck --repofrompath=centos,https://mirror.stream.centos.org/9-stream/AppStream/x86_64 -y install libglvnd-core-devel libglvnd-devel
+   31  yum --nogpgcheck --repofrompath=centos,https://mirror.stream.centos.org/9-stream/AppStream/x86_64/os -y install libglvnd-core-devel libglvnd-devel
+   33  yum -y module install nvidia-driver:latest-dkms
+   34  yum --nogpgcheck --repofrompath=centos,https://mirror.stream.centos.org/9-stream/AppStream/x86_64/os -y install libvdpau
+   35  yum -y module install nvidia-driver:latest-dkms
+   36  yum --nogpgcheck --repofrompath=centos,https://mirror.stream.centos.org/9-stream/AppStream/x86_64/os -y install egl-wayland
+   37  yum -y module install nvidia-driver:latest-dkms
+   38  yum --nogpgcheck --repofrompath=centos,https://mirror.stream.centos.org/9-stream/AppStream/x86_64/os -y install xorg-x11-server-Xorg
+   39  yum -y module install nvidia-driver:latest-dkms
+   40  yum --nogpgcheck --repofrompath=centos,https://mirror.stream.centos.org/9-stream/AppStream/x86_64/os -y install ocl-icd opencl-filesystem grubby
+   41  yum --nogpgcheck --repofrompath=centos,https://mirror.stream.centos.org/9-stream/AppStream/x86_64/os -y install ocl-icd opencl-filesystem
+   42  yum -y module install nvidia-driver:latest-dkms
+   43  yum --nogpgcheck --repofrompath=centos,https://mirror.stream.centos.org/9-stream/BaseOS/x86_64/os -y install grubby
+   44  yum --nogpgcheck --repofrompath=centos,https://mirror.stream.centos.org/9-stream/AppStream/x86_64/os -y install ocl-icd opencl-filesystem
+   45  yum --nogpgcheck --repofrompath=centosAppStream,https://mirror.stream.centos.org/9-stream/AppStream/x86_64/os -y install ocl-icd opencl-filesystem
+   46  yum --nogpgcheck --repofrompath=centosBaseOS,https://mirror.stream.centos.org/9-stream/BaseOS/x86_64/os -y install grubby
+   47  yum -y module install nvidia-driver:latest-dkms
+   48  yum --nogpgcheck --repofrompath=centosAppStream,https://mirror.stream.centos.org/9-stream/AppStream/x86_64/os -y install elfutils-libelf-devel
+   49  yum --nogpgcheck --repofrompath=centosBaseOS,https://mirror.stream.centos.org/9-stream/BaseOS/x86_64/os -y install elfutils-libelf
+   50  yum --nogpgcheck --repofrompath=centosAppStream,https://mirror.stream.centos.org/9-stream/AppStream/x86_64/os -y install elfutils-libelf-devel
+   51  yum -y module install nvidia-driver:latest-dkms
+   58  yum -y module install cuda
+   59  yum -y install cuda
+   60  yum --nogpgcheck --repofrompath=centosAppStream,https://mirror.stream.centos.org/9-stream/AppStream/x86_64/os -y install libxcb
+   61  yum -y install cuda
+   62  yum --nogpgcheck --repofrompath=centosAppStream,https://mirror.stream.centos.org/9-stream/AppStream/x86_64/os -y install xcb-util
+   63  yum -y install cuda
+   64  yum --nogpgcheck --repofrompath=centosAppStream,https://mirror.stream.centos.org/9-stream/AppStream/x86_64/os -y install xcb-util
+   65  yum --nogpgcheck --repofrompath=centosAppStream,https://mirror.stream.centos.org/9-stream/AppStream/x86_64/os -y install xcb-util-image
+   66  yum --nogpgcheck --repofrompath=centosAppStream,https://mirror.stream.centos.org/9-stream/AppStream/x86_64/os -y install xcb-util-renderutil
+   67  yum --nogpgcheck --repofrompath=centosAppStream,https://mirror.stream.centos.org/9-stream/AppStream/x86_64/os -y install xcb-util-keysyms
+   68  yum -y install cuda
+   69  yum --nogpgcheck --repofrompath=centosAppStream,https://mirror.stream.centos.org/9-stream/AppStream/x86_64/os -y install xcb-util-wm
+   70  yum -y install cuda
+   71  yum --nogpgcheck --repofrompath=centosAppStream,https://mirror.stream.centos.org/9-stream/AppStream/x86_64/os -y install libxkbcommon
+   72  yum --nogpgcheck --repofrompath=centosAppStream,https://mirror.stream.centos.org/9-stream/AppStream/x86_64/os -y install libxkbcommon-devel
+   73  yum --nogpgcheck --repofrompath=centosAppStream,https://mirror.stream.centos.org/9-stream/AppStream/x86_64/os -y install libxkbcommon-x11
+   74  yum -y install cuda
+   85  history | grep yum
+   86  history | grep yum > history.txt
