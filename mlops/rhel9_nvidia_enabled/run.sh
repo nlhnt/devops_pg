@@ -1,0 +1,1 @@
+docker run -it --rm --gpus all check-gpu:latest bash
