@@ -1,0 +1,201 @@
+ARG IMAGE_NAME
+ARG IMAGE_TAG
+ARG RHEL_VERSION
+ARG REPOSITORY_URL
+ARG PYTHON_VERSION=3.9.16
+# jovyan user details
+ARG NB_USER=jovyan
+ARG NB_UID=1000
+ARG NB_HOME=/home/jovyan
+ARG JUPYTERHUB_DIR=/srv/jupyterhub
+ARG PYCURL_SSL_LIBRARY=openssl
+
+FROM ${IMAGE_NAME}:${IMAGE_TAG} as base
+FROM ${REPOSITORY_URL}/bsk-rhel${RHEL_VERSION}:latest as build
+
+# use bash as the default shell for this image
+SHELL ["/bin/bash", "-l", "-c"]
+
+# jovyan user details
+ARG NB_USER
+ARG NB_UID
+ARG NB_HOME
+ARG JUPYTERHUB_DIR
+ARG PYCURL_SSL_LIBRARY
+
+# requirements location
+ARG REQUIREMENTS=/tmp/requirements.txt
+
+USER root
+
+ARG PYTHON_VERSION
+
+# Update yum repository list
+ARG UBI_FILE
+
+RUN rm -f /etc/yum.repos.d/bsk-rhel*-main.repo && \
+    rm -f /etc/yum.repos.d/bsk-rhel*-main-epel-everything.repo && \
+    rm -f /etc/yum.repos.d/bsk-ubi*.repo
+COPY ${UBI_FILE} /etc/yum.repos.d/ubi.repo
+
+# Install required packages
+# Update the base system
+RUN yum upgrade -y --nodocs && \
+    yum -y --allowerasing install --nodocs \
+    make \
+    zlib-devel \
+    bzip2 bzip2-devel \
+    sqlite sqlite-devel \
+    openssl-devel \
+    libffi-devel \
+    gcc gcc-c++ \
+    procps \
+    libcurl-devel \
+    xz xz-devel \
+    git \
+    nodejs \
+    npm \
+    ncurses-devel \
+    tar \
+    findutils \
+    postgresql-devel \
+    yum \
+    dnf
+RUN yum --nogpgcheck --repofrompath=centos,https://mirror.stream.centos.org/9-stream/AppStream/x86_64/os -y \
+    install readline-devel
+
+# add jovyan user
+RUN useradd -u ${NB_UID} -d ${NB_HOME} ${NB_USER} && \
+    mkdir -p ${JUPYTERHUB_DIR} && \
+    chown ${NB_USER}:${NB_USER} ${JUPYTERHUB_DIR}
+
+# Install pyenv using pyenv-installer
+## set $PYENV_ROOT to choose the install directory
+ENV PYENV_ROOT=/opt/.pyenv \
+    VIRTUAL_ENV=/opt/.pyenv/versions/${PYTHON_VERSION}
+
+## pyevn installation
+RUN curl -L https://github.com/pyenv/pyenv-installer/raw/master/bin/pyenv-installer | bash
+
+# setup pyenv ENV variables
+RUN echo 'export PYENV_ROOT="$PYENV_ROOT"' >> ~/.bashrc && \
+    echo 'export PATH="$PYENV_ROOT/bin:$PATH"' >> ~/.bashrc && \
+    echo -e 'if command -v pyenv 1>/dev/null 2>&1; then\n eval "$(pyenv init -)"\nfi' >> ~/.bashrc
+
+# install python of chosen version
+RUN pyenv install ${PYTHON_VERSION}
+
+# remove *.pem files in test directory
+RUN find /opt/.pyenv/versions/${PYTHON_VERSION}/lib/python*/test \
+    -name "*.pem" -type f -delete
+
+
+# choose global python version
+RUN pyenv global ${PYTHON_VERSION}
+
+# Copy project requirements.in file
+COPY --chown=$NB_USER:root hub/requirements.in /home/${NB_USER}/requirements.in
+
+# Prepare python environment
+ARG INDEX_URL
+
+# Prepare and install jupyterhub python dependencies
+# RUN pip install pip-tools && \
+#     pip-compile /home/${NB_USER}/requirements.in && \
+#     pip install -r /home/${NB_USER}/requirements.txt
+COPY --from=base ${REQUIREMENTS} ${REQUIREMENTS}
+RUN pip install -r ${REQUIREMENTS}
+
+# Copy jwtauthenticator
+COPY hub/jwtauthenticator ${VIRTUAL_ENV}/lib/jwtauthenticator
+
+# Update pip, setuptools
+RUN pip install --no-cache-dir --upgrade setuptools certifi && \
+    pip install --no-cache-dir --upgrade wheel python-json-logger cryptography && \
+    pip install --no-cache-dir -e ${VIRTUAL_ENV}/lib/jwtauthenticator && \
+    pip uninstall pip --yes
+
+# remove dependency test secrets
+RUN PY_MAJOR_VER=$(echo ${PYTHON_VERSION} | cut -d. -f1) && \
+    PY_MINOR_VER=$(echo ${PYTHON_VERSION} | cut -d. -f2) && \
+    PYTHON_VERSION_NO_PATCH=${PY_MAJOR_VER}.${PY_MINOR_VER} && \
+    echo ${PYTHON_VERSION_NO_PATCH} && \
+    find /opt/.pyenv/versions/${PYTHON_VERSION}/lib/python${PYTHON_VERSION_NO_PATCH}/site-packages/tornado/test \
+    -name "*.key" -type f -delete
+    # rm -rf /opt/.pyenv/versions/${PYTHON_VERSION}/lib/python${PYTHON_VERSION_NO_PATCH}/site-packages/tornado/test
+    
+
+# FINAL IMAGE
+FROM ${REPOSITORY_URL}/bsk-rhel${RHEL_VERSION}:latest
+
+USER root
+
+ARG PYTHON_VERSION
+ARG NB_USER
+ARG NB_UID
+ARG NB_HOME
+ARG JUPYTERHUB_DIR
+ARG PYCURL_SSL_LIBRARY
+
+# Update yum repository list
+ARG UBI_FILE
+
+RUN rm -f /etc/yum.repos.d/bsk-rhel*-main.repo && \
+    rm -f /etc/yum.repos.d/bsk-rhel*-main-epel-everything.repo && \
+    rm -f /etc/yum.repos.d/bsk-ubi*.repo
+COPY ${UBI_FILE} /etc/yum.repos.d/ubi.repo
+
+# Install required packages
+# Update the base system
+RUN yum upgrade -y --nodocs && \
+    yum -y --allowerasing install --nodocs \
+    make \
+    zlib-devel \
+    bzip2 bzip2-devel \
+    sqlite sqlite-devel \
+    openssl-devel \
+    libffi-devel \
+    gcc gcc-c++ \
+    procps \
+    libcurl-devel \
+    xz xz-devel \
+    git \
+    nodejs \
+    npm \
+    ncurses-devel
+
+# install proxy
+RUN npm install -g configurable-http-proxy@^4.2.0
+
+# add jovyan user
+RUN useradd -u ${NB_UID} -d ${NB_HOME} ${NB_USER} && \
+    mkdir -p ${JUPYTERHUB_DIR} && \
+    chown ${NB_USER}:${NB_USER} ${JUPYTERHUB_DIR}
+
+ENV PYENV_ROOT=/opt/.pyenv \
+    VIRTUAL_ENV=/opt/.pyenv/versions/${PYTHON_VERSION}
+
+# copy python distribution
+COPY --from=build --chown=$NB_USER:root $VIRTUAL_ENV $VIRTUAL_ENV
+
+# back to default sh as the default shell for this image
+SHELL ["/bin/sh", "-c"]
+
+# build complete, now run the jupyterhub
+WORKDIR ${JUPYTERHUB_DIR}
+
+# JupyterHub API port
+EXPOSE 8081
+
+HEALTHCHECK --start-period=10s CMD bash -c '</dev/tcp/127.0.0.1/8081 &>/dev/null' || exit 1
+
+USER ${NB_USER}
+
+# SETUP PYTHON PATHS
+ENV PATH="${VIRTUAL_ENV}/bin:${PATH}"
+
+CMD ["jupyterhub", "--config", "/usr/local/etc/jupyterhub/jupyterhub_config.py"]
+
+
+
+
