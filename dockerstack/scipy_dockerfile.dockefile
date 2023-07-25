@@ -1,0 +1,232 @@
+ARG IMAGE_NAME
+ARG IMAGE_TAG
+ARG RHEL_VERSION
+ARG REPOSITORY_URL
+ARG PYTHON_VERSION=3.10
+
+# jovyan user details
+ARG NB_USER=jovyan
+ARG NB_UID=1000
+ARG NB_GID=100
+ARG NB_HOME=/home/jovyan
+ARG JUPYTERHUB_DIR=/srv/jupyterhub
+
+FROM ${IMAGE_NAME}:${IMAGE_TAG} as base
+
+FROM ${REPOSITORY_URL}/bsk-rhel${RHEL_VERSION}:latest
+
+# use bash as the default shell for this image
+SHELL ["/bin/bash", "-l", "-c"]
+
+# jovyan user details
+ARG NB_USER
+ARG NB_UID
+ARG NB_GID
+ARG NB_HOME
+
+USER root
+
+# Update yum repository list
+ARG UBI_FILE
+
+RUN rm -f /etc/yum.repos.d/bsk-rhel*-main.repo && \
+    rm -f /etc/yum.repos.d/bsk-rhel*-main-epel-everything.repo && \
+    rm -f /etc/yum.repos.d/bsk-ubi*.repo
+COPY ${UBI_FILE} /etc/yum.repos.d/ubi.repo
+
+ARG PYTHON_VERSION
+
+# Install required packages
+# Update the base system
+RUN dnf upgrade -y --nodocs && \
+    # subscription-manager repos --enable codeready-builder-for-rhel-9-$(arch)-rpms && \
+    dnf install -y --nodocs https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm
+
+RUN dnf --enablerepo=epel -y install --nodocs \
+    make \
+    zlib-devel \
+    bzip2 bzip2-devel \
+    sqlite sqlite-devel \
+    openssl-devel \
+    libffi-devel \
+    gcc gcc-c++ \
+    procps \
+    libcurl-devel \
+    xz xz-devel \
+    git \
+    nodejs \
+    npm \
+    ncurses-devel \
+    tar \
+    findutils \
+    wget \
+    # https://discussion.fedoraproject.org/t/how-to-set-the-locales-in-a-toolbox/31182/4
+    glibc-langpack-en
+
+RUN yum --nogpgcheck --repofrompath=centos,https://mirror.stream.centos.org/9-stream/AppStream/x86_64/os -y \
+    install readline-devel
+
+# Configure environment
+ENV CONDA_DIR=/opt/conda \
+    SHELL=/bin/bash \
+    NB_USER="${NB_USER}" \
+    NB_UID=${NB_UID} \
+    NB_GID=${NB_GID} \
+    LC_ALL=en_US.UTF-8 \
+    LANG=en_US.UTF-8 \
+    LANGUAGE=en_US.UTF-8
+
+ENV PATH="${CONDA_DIR}/bin:${PATH}" \
+    HOME="/home/${NB_USER}"
+
+# Copy a script that we will use to correct permissions after running certain commands
+COPY --chmod=755 nb_kernel_common/scripts/fix-permissions /usr/local/bin/fix-permissions
+# RUN chmod a+rx /usr/local/bin/fix-permissions
+
+# Copy install micromamba script
+COPY --chmod=755 nb_kernel_common/scripts/get_micromamba /usr/local/bin/get_micromamba
+# RUN chmod a+rx /usr/local/bin/get_micromamba
+
+# Enable prompt color in the skeleton .bashrc before creating the default NB_USER
+# hadolint ignore=SC2016
+RUN sed -i 's/^#force_color_prompt=yes/force_color_prompt=yes/' /etc/skel/.bashrc && \
+   # Add call to conda init script see https://stackoverflow.com/a/58081608/4413446
+   echo 'eval "$(command conda shell.bash hook 2> /dev/null)"' >> /etc/skel/.bashrc
+
+RUN mkdir -p "${CONDA_DIR}"
+
+# add jovyan user
+# Create conda dir
+RUN useradd --no-log-init --create-home --shell /bin/bash --no-user-group --uid ${NB_UID} --gid ${NB_GID} --home ${NB_HOME} ${NB_USER} && \
+    mkdir -p "${CONDA_DIR}" && \
+    chown "${NB_USER}:${NB_GID}" "${CONDA_DIR}" && \
+    chmod g+w /etc/passwd && \
+    fix-permissions "${HOME}" && \
+    fix-permissions "${CONDA_DIR}"
+
+# Download and install Micromamba, and initialize Conda prefix.
+#   <https://github.com/mamba-org/mamba#micromamba>
+#   Similar projects using Micromamba:
+#     - Micromamba-Docker: <https://github.com/mamba-org/micromamba-docker>
+#     - repo2docker: <https://github.com/jupyterhub/repo2docker>
+# Install Python, Mamba and jupyter_core
+# Cleanup temporary files and remove Micromamba
+# Correct permissions
+# Do all this in a single RUN command to avoid duplicating all of the
+# files across image layers when the permissions change
+COPY --chown="${NB_UID}:${NB_GID}" nb_kernel_common/scripts/initial-condarc "${CONDA_DIR}/.condarc"
+WORKDIR /tmp
+RUN get_micromamba
+
+# minimal notebook installs over docker-stacks-foundation
+RUN dnf upgrade -y --nodocs && \
+    dnf -y install --nodocs \
+    tzdata \
+    unzip \
+    vim \
+    # git-over-ssh
+    openssh-clients \
+    # less is needed to run help in R
+    # see: https://github.com/jupyter/docker-stacks/issues/1588
+    less \
+    # nbconvert dependencies
+    # https://nbconvert.readthedocs.io/en/latest/install.html#installing-tex
+    # texlive-xetex \
+    # texlive-fonts-recommended \
+    # texlive-plain-generic \
+    # texlive-scheme-full \
+    # Enable clipboard on Linux host systems
+    xclip \
+    ca-certificates && \
+    # cleanup
+    dnf clean all && \
+    rm -rf /var/cache/dnf
+
+# minimal nb mamba/conda dependencies
+RUN mamba install --yes \
+    'notebook' \
+    'jupyterhub' \
+    'jupyterlab' && \
+    jupyter notebook --generate-config && \
+    mamba clean --all -f -y && \
+    npm cache clean --force && \
+    jupyter lab clean && \
+    rm -rf "/home/${NB_USER}/.cache/yarn" && \
+    fix-permissions "${HOME}" && \
+    fix-permissions "${CONDA_DIR}"
+
+# Install scipy dependencies
+# https://github.com/jupyter/docker-stacks/blob/main/scipy-notebook/Dockerfile
+RUN mamba install --yes \
+    'altair' \
+    'beautifulsoup4' \
+    'bokeh' \
+    'bottleneck' \
+    'cloudpickle' \
+    'conda-forge::blas=*=openblas' \
+    'cython' \
+    'dask' \
+    'dill' \
+    'h5py' \
+    'ipympl'\
+    'ipywidgets' \
+    # Temporary fix for: https://github.com/jupyter/docker-stacks/issues/1851
+    'jupyter_server>=2.0.0' \
+    'matplotlib-base' \
+    'numba' \
+    'numexpr' \
+    'openpyxl' \
+    'pandas' \
+    'patsy' \
+    'protobuf' \
+    'pytables' \
+    'scikit-image' \
+    'scikit-learn' \
+    'scipy' \
+    'seaborn' \
+    'sqlalchemy' \
+    'statsmodels' \
+    'sympy' \
+    'widgetsnbextension'\
+    'xlrd' && \
+    mamba clean --all -f -y && \
+    fix-permissions "${HOME}" && \
+    fix-permissions "${CONDA_DIR}"
+
+# Install facets which does not have a pip or conda package at the moment
+WORKDIR /tmp
+RUN git clone https://github.com/PAIR-code/facets.git && \
+    jupyter nbextension install facets/facets-dist/ --sys-prefix && \
+    rm -rf /tmp/facets && \
+    fix-permissions "${CONDA_DIR}" && \
+    fix-permissions "${HOME}"
+
+# Import matplotlib the first time to build the font cache.
+ENV XDG_CACHE_HOME="${HOME}/.cache/"
+
+RUN MPLBACKEND=Agg python -c "import matplotlib.pyplot" && \
+    fix-permissions "${HOME}"
+
+# fix npm version
+RUN npm install -g npm@latest
+
+# cleanup of secrets
+RUN find /opt/conda/lib/python*/site-packages/tornado/test \
+    -name "*.key" -type f -delete
+
+# CMD ["start.sh"]
+CMD ["start-notebook.sh"]
+
+# Copy local files as late as possible to avoid cache busting
+COPY --chown="${NB_UID}:${NB_GID}" --chmod=755 nb_kernel_common/scripts/start.sh /usr/local/bin/
+# RUN chmod a+rx /usr/local/bin/start.sh
+
+COPY --chown="${NB_UID}:${NB_GID}" --chmod=755 nb_kernel_common/scripts/start-notebook.sh /usr/local/bin/
+# RUN chmod a+rx /usr/local/bin/start-notebook.sh
+
+COPY --chown="${NB_UID}:${NB_GID}" --chmod=755 nb_kernel_common/scripts/start-singleuser.sh /usr/local/bin/
+# RUN chmod a+rx /usr/local/bin/start-singleuser.sh
+
+USER ${NB_UID}
+
+WORKDIR "${HOME}"
