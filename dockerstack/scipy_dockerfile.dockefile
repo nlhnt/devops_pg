@@ -11,9 +11,7 @@ ARG NB_GID=100
 ARG NB_HOME=/home/jovyan
 ARG JUPYTERHUB_DIR=/srv/jupyterhub
 
-FROM ${IMAGE_NAME}:${IMAGE_TAG} as base
-
-FROM ${REPOSITORY_URL}/bsk-rhel${RHEL_VERSION}:latest
+FROM redhat/ubi9:latest
 
 # use bash as the default shell for this image
 SHELL ["/bin/bash", "-l", "-c"]
@@ -28,11 +26,6 @@ USER root
 
 # Update yum repository list
 ARG UBI_FILE
-
-RUN rm -f /etc/yum.repos.d/bsk-rhel*-main.repo && \
-    rm -f /etc/yum.repos.d/bsk-rhel*-main-epel-everything.repo && \
-    rm -f /etc/yum.repos.d/bsk-ubi*.repo
-COPY ${UBI_FILE} /etc/yum.repos.d/ubi.repo
 
 ARG PYTHON_VERSION
 
@@ -193,13 +186,15 @@ RUN mamba install --yes \
     fix-permissions "${HOME}" && \
     fix-permissions "${CONDA_DIR}"
 
+RUN pip install jupyter_contrib_nbextensions
+
 # Install facets which does not have a pip or conda package at the moment
-WORKDIR /tmp
-RUN git clone https://github.com/PAIR-code/facets.git && \
-    jupyter nbextension install facets/facets-dist/ --sys-prefix && \
-    rm -rf /tmp/facets && \
-    fix-permissions "${CONDA_DIR}" && \
-    fix-permissions "${HOME}"
+# WORKDIR /tmp
+# RUN git clone https://github.com/PAIR-code/facets.git && \
+#     jupyter nbextension install facets/facets-dist/ --sys-prefix && \
+#     rm -rf /tmp/facets && \
+#     fix-permissions "${CONDA_DIR}" && \
+#     fix-permissions "${HOME}"
 
 # Import matplotlib the first time to build the font cache.
 ENV XDG_CACHE_HOME="${HOME}/.cache/"
@@ -227,6 +222,6 @@ COPY --chown="${NB_UID}:${NB_GID}" --chmod=755 nb_kernel_common/scripts/start-no
 COPY --chown="${NB_UID}:${NB_GID}" --chmod=755 nb_kernel_common/scripts/start-singleuser.sh /usr/local/bin/
 # RUN chmod a+rx /usr/local/bin/start-singleuser.sh
 
-USER ${NB_UID}
+# USER ${NB_UID}
 
 WORKDIR "${HOME}"

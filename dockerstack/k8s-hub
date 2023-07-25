@@ -2,7 +2,7 @@ ARG IMAGE_NAME
 ARG IMAGE_TAG
 ARG RHEL_VERSION
 ARG REPOSITORY_URL
-ARG PYTHON_VERSION=3.9.16
+ARG PYTHON_VERSION=3.10.12
 # jovyan user details
 ARG NB_USER=jovyan
 ARG NB_UID=1000
@@ -10,8 +10,7 @@ ARG NB_HOME=/home/jovyan
 ARG JUPYTERHUB_DIR=/srv/jupyterhub
 ARG PYCURL_SSL_LIBRARY=openssl
 
-FROM ${IMAGE_NAME}:${IMAGE_TAG} as base
-FROM ${REPOSITORY_URL}/bsk-rhel${RHEL_VERSION}:latest as build
+FROM redhat/ubi9:latest as build
 
 # use bash as the default shell for this image
 SHELL ["/bin/bash", "-l", "-c"]
@@ -30,14 +29,6 @@ USER root
 
 ARG PYTHON_VERSION
 
-# Update yum repository list
-ARG UBI_FILE
-
-RUN rm -f /etc/yum.repos.d/bsk-rhel*-main.repo && \
-    rm -f /etc/yum.repos.d/bsk-rhel*-main-epel-everything.repo && \
-    rm -f /etc/yum.repos.d/bsk-ubi*.repo
-COPY ${UBI_FILE} /etc/yum.repos.d/ubi.repo
-
 # Install required packages
 # Update the base system
 RUN yum upgrade -y --nodocs && \
@@ -53,8 +44,8 @@ RUN yum upgrade -y --nodocs && \
     libcurl-devel \
     xz xz-devel \
     git \
-    nodejs \
-    npm \
+    # nodejs \
+    # npm \
     ncurses-devel \
     tar \
     findutils \
@@ -100,19 +91,17 @@ COPY --chown=$NB_USER:root hub/requirements.in /home/${NB_USER}/requirements.in
 ARG INDEX_URL
 
 # Prepare and install jupyterhub python dependencies
-# RUN pip install pip-tools && \
-#     pip-compile /home/${NB_USER}/requirements.in && \
-#     pip install -r /home/${NB_USER}/requirements.txt
-COPY --from=base ${REQUIREMENTS} ${REQUIREMENTS}
-RUN pip install -r ${REQUIREMENTS}
+RUN pip install pip-tools && \
+    pip-compile /home/${NB_USER}/requirements.in && \
+    pip install -r /home/${NB_USER}/requirements.txt
 
 # Copy jwtauthenticator
-COPY hub/jwtauthenticator ${VIRTUAL_ENV}/lib/jwtauthenticator
+# COPY hub/jwtauthenticator ${VIRTUAL_ENV}/lib/jwtauthenticator
 
 # Update pip, setuptools
 RUN pip install --no-cache-dir --upgrade setuptools certifi && \
     pip install --no-cache-dir --upgrade wheel python-json-logger cryptography && \
-    pip install --no-cache-dir -e ${VIRTUAL_ENV}/lib/jwtauthenticator && \
+    # pip install --no-cache-dir -e ${VIRTUAL_ENV}/lib/jwtauthenticator && \
     pip uninstall pip --yes
 
 # remove dependency test secrets
@@ -126,7 +115,7 @@ RUN PY_MAJOR_VER=$(echo ${PYTHON_VERSION} | cut -d. -f1) && \
     
 
 # FINAL IMAGE
-FROM ${REPOSITORY_URL}/bsk-rhel${RHEL_VERSION}:latest
+FROM redhat/ubi9:latest
 
 USER root
 
@@ -136,14 +125,6 @@ ARG NB_UID
 ARG NB_HOME
 ARG JUPYTERHUB_DIR
 ARG PYCURL_SSL_LIBRARY
-
-# Update yum repository list
-ARG UBI_FILE
-
-RUN rm -f /etc/yum.repos.d/bsk-rhel*-main.repo && \
-    rm -f /etc/yum.repos.d/bsk-rhel*-main-epel-everything.repo && \
-    rm -f /etc/yum.repos.d/bsk-ubi*.repo
-COPY ${UBI_FILE} /etc/yum.repos.d/ubi.repo
 
 # Install required packages
 # Update the base system
@@ -160,9 +141,16 @@ RUN yum upgrade -y --nodocs && \
     libcurl-devel \
     xz xz-devel \
     git \
-    nodejs \
-    npm \
+    # nodejs \
+    # npm \
     ncurses-devel
+
+# Install nvm
+RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.4/install.sh | bash
+
+# Install newest nodejs, set it as default.
+RUN mvn install node && \
+    mvn alias default node
 
 # install proxy
 RUN npm install -g configurable-http-proxy@^4.2.0
