@@ -116,6 +116,8 @@ RUN PY_MAJOR_VER=$(echo ${PYTHON_VERSION} | cut -d. -f1) && \
 
 # FINAL IMAGE
 FROM redhat/ubi9:latest
+# use bash as the default shell for this image
+SHELL ["/bin/bash", "-l", "-c"]
 
 USER root
 
@@ -146,11 +148,36 @@ RUN yum upgrade -y --nodocs && \
     ncurses-devel
 
 # Install nvm
-RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.4/install.sh | bash
+# Instructions:
+#   https://github.com/nvm-sh/nvm/issues/1533
+#   https://github.com/nvm-sh/nvm#git-install
+ENV NVM_DIR=/opt/.nvm
+ENV NVM_PROFILE=/etc/profile.d/nvm.sh
 
-# Install newest nodejs, set it as default.
-RUN mvn install node && \
-    mvn alias default node
+RUN groupadd nvm && \
+    usermod -aG nvm root && \
+    mkdir ${NVM_DIR} && \
+    chown :nvm ${NVM_DIR} && \
+    chmod g+ws ${NVM_DIR}
+
+WORKDIR ${NVM_DIR}
+RUN git clone https://github.com/nvm-sh/nvm.git "$NVM_DIR" && \
+    git checkout `git describe --abbrev=0 --tags --match "v[0-9]*" $(git rev-list --tags --max-count=1)`
+
+RUN mkdir ${NVM_DIR}/.cache && \
+    mkdir ${NVM_DIR}/versions && \
+    mkdir ${NVM_DIR}/alias && \
+    chmod -R g+ws ${NVM_DIR}/.cache && \
+    chmod -R g+ws ${NVM_DIR}/versions && \
+    chmod -R g+ws ${NVM_DIR}/alias
+
+RUN echo 'export NVM_DIR="/opt/.nvm"' > ${NVM_PROFILE} && \
+    echo '[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"' >${NVM_PROFILE} && \
+    chmod +x ${NVM_PROFILE}
+
+# Install newest nodejs using nvm, set it as default.
+RUN nvm install node && \
+    nvm alias default node
 
 # install proxy
 RUN npm install -g configurable-http-proxy@^4.2.0
@@ -159,6 +186,9 @@ RUN npm install -g configurable-http-proxy@^4.2.0
 RUN useradd -u ${NB_UID} -d ${NB_HOME} ${NB_USER} && \
     mkdir -p ${JUPYTERHUB_DIR} && \
     chown ${NB_USER}:${NB_USER} ${JUPYTERHUB_DIR}
+
+# add jovyan user to nvm group
+RUN usermod -aG nvm ${NB_USER}
 
 ENV PYENV_ROOT=/opt/.pyenv \
     VIRTUAL_ENV=/opt/.pyenv/versions/${PYTHON_VERSION}
