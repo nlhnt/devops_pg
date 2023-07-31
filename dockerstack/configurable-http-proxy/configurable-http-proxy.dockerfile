@@ -2,8 +2,8 @@ ARG IMAGE_NAME
 ARG IMAGE_TAG
 ARG RHEL_VERSION
 ARG REPOSITORY_URL
-ARG NB_USER=appown
-ARG NB_HOME=/home/appown
+ARG NB_USER=nobody
+ARG NB_HOME=/home/${NB_USER}
 ARG NB_UID=1001
 FROM jupyterhub/configurable-http-proxy:4.5.3 as base
 FROM redhat/ubi9:latest as build
@@ -71,15 +71,15 @@ RUN nvm install node && \
     nvm alias default node
 
 # create appown user and group && \
-RUN groupadd appown --gid ${NB_UID} && \
-    useradd -u ${NB_UID} -d ${NB_HOME} -s /sbin/nologin -c "Appown user" -g ${NB_UID} ${NB_USER} && \
-    dnf install -y --nodocs shadow-utils
+RUN dnf install -y --nodocs shadow-utils
+    # groupadd ${NB_USER} --gid ${NB_UID} && \
+    # useradd -u ${NB_UID} -d ${NB_HOME} -s /sbin/nologin -c "Appown user" -g ${NB_UID} ${NB_USER} && \
 
-RUN chage -M 99999 appown && \
-    chown appown:root /home/appown && \
-    chmod 750 /home/appown && \
-    mkdir /home/appown/tmp && \
-    chmod 770 /home/appown/tmp
+RUN chage -M 99999 ${NB_USER} && \
+    chown ${NB_USER}:root /home/${NB_USER} && \
+    chmod 750 /home/${NB_USER} && \
+    mkdir /home/${NB_USER}/tmp && \
+    chmod 770 /home/${NB_USER}/tmp
 
 # add appown user to nvm group
 RUN usermod --append --groups nvm $NB_USER
@@ -113,4 +113,4 @@ HEALTHCHECK --start-period=10s CMD bash -c '</dev/tcp/127.0.0.1/8000 &>/dev/null
 ENV PATH=${APP_INSTALL_DIR}/bin:$PATH
 ENV APP_INSTALL_DIR=${APP_INSTALL_DIR}
 # ENTRYPOINT ["/bin/bash", "-l", "-c"]
-ENTRYPOINT ["/bin/bash", "-l", "-c", "$APP_INSTALL_DIR/chp-docker-entrypoint"]
+CMD ["/bin/bash", "-l", "-c", "$APP_INSTALL_DIR/chp-docker-entrypoint"]
